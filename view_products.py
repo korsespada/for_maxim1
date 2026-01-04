@@ -166,9 +166,17 @@ if file_path:
                         st.text("Нет фото")
 
                     # 2. Описание (обрезаем, чтобы плитка не была гигантской)
-                    desc = str(row.get('new_name', ''))
-                    short_desc = (desc[:40] + '..') if len(desc) > 40 else desc
-                    st.caption(short_desc if short_desc != 'nan' else "Без описания")
+                   full_desc = str(row.get('description', '')).strip()  # <-- имя колонки
+                    if full_desc.lower() == 'nan' or full_desc == '':
+                        short_desc = "Без описания"
+                    else:
+                        # первые 6 слов
+                        words = full_desc.split()
+                        short_desc = " ".join(words[:6])
+                        if len(words) > 6:
+                            short_desc += "…"
+                    
+                    st.caption(short_desc)
 
                     # 3. Цена
                     price = row.get('price', '')
@@ -176,13 +184,13 @@ if file_path:
 
                     # 4. Кнопка удаления
                     # Важно: используем real_index (индекс в df), чтобы удалить правильную строку
-                    st.button(
-                        "❌ Удалить", 
-                        key=f"btn_{real_index}", 
-                        on_click=delete_item, 
-                        args=(real_index, file_path),
-                        type="primary" # Красная кнопка (в некоторых темах)
-                    )
+                    # st.button(
+                    #     "❌ Удалить", 
+                    #     key=f"btn_{real_index}", 
+                    #     on_click=delete_item, 
+                    #     args=(real_index, file_path),
+                    #     type="primary" # Красная кнопка (в некоторых темах)
+                    # )
 
     else:
         st.warning("Файл пуст или не загружен.")
