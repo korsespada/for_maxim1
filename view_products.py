@@ -11,7 +11,6 @@ DATA_DIR = "data"        # папка с файлами в репо
 DEFAULT_FILE = "szwego_products.csv"
 
 # ---------- Настройки стилей ----------
-
 st.markdown("""
 <style>
     div[data-testid="column"] {
@@ -36,11 +35,23 @@ st.markdown("""
         color: rgba(250, 250, 250, 0.8);
         margin-top: 4px;
     }
+    /* Кнопка удаления */
+    .delete-btn {
+        background-color: #ff4b4b !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 4px !important;
+        padding: 4px 8px !important;
+        font-size: 12px !important;
+        margin-top: 5px !important;
+    }
+    .delete-btn:hover {
+        background-color: #ff3333 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------- Выбор файла ----------
-
 def get_file_path():
     st.sidebar.title("📁 Настройки файла")
 
@@ -88,7 +99,6 @@ def get_file_path():
         return temp_path
 
 # ---------- Работа с CSV ----------
-
 def load_data(file_path):
     if not file_path:
         st.error("Файл не выбран!")
@@ -113,8 +123,18 @@ def save_data(df, file_path):
     except Exception as e:
         st.error(f"Ошибка сохранения: {e}")
 
-# ---------- Картинки ----------
+def download_data(df, filename):
+    """Создает скачиваемый CSV файл"""
+    csv = df.to_csv(sep=';', index=False, encoding='utf-8')
+    st.download_button(
+        label="💾 Сохранить новый файл",
+        data=csv,
+        file_name=filename,
+        mime="text/csv",
+        use_container_width=True
+    )
 
+# ---------- Картинки ----------
 BASE_OPTIM_PARAMS = "imageMogr2/auto-orient/thumbnail/!320x320r/quality/80/format/jpg"
 
 def to_thumb(url: str) -> str:
@@ -142,23 +162,35 @@ def get_first_image(photos_str):
     return None
 
 # ---------- Основная логика ----------
-
 file_path = get_file_path()
 
 if file_path:
     st.title("📦 Управление товарами")
     st.info(f"Текущий файл: `{file_path}`")
 
+    # Инициализация данных
     if 'df' not in st.session_state or \
        'current_file' not in st.session_state or \
        st.session_state['current_file'] != file_path:
         st.session_state['df'] = load_data(file_path)
         st.session_state['current_file'] = file_path
+        st.session_state['deleted_rows'] = set()
 
-    df = st.session_state['df']
+    df = st.session_state['df'].copy()
+    
+    # Удаление отмеченных строк
+    if 'deleted_rows' in st.session_state and st.session_state['deleted_rows']:
+        df = df.drop(list(st.session_state['deleted_rows']), axis=0).reset_index(drop=True)
+        st.session_state['df'] = df
+        st.session_state['deleted_rows'] = set()
+        st.rerun()
 
     if not df.empty:
         st.write(f"Всего товаров: **{len(df)}**")
+
+        # Кнопка сохранения (всегда видна после загрузки/редактирования)
+        filename = os.path.basename(file_path)
+        download_data(df, f"updated_{filename}")
 
         COLS_COUNT = 6
 
@@ -191,8 +223,32 @@ if file_path:
                     # 3. Цена
                     price = row.get('price', '')
                     st.write(f"**{price}**")
+
+                    # 4. Кнопка удаления
+                    if st.button("🗑️ Удалить", key=f"delete_{real_index}", help="Удалить этот товар"):
+                        if 'deleted_rows' not in st.session_state:
+                            st.session_state['deleted_rows'] = set()
+                        st.session_state['deleted_rows'].add(real_index)
+                        st.rerun()
+                        
+                        st.markdown(
+                            """
+                            <style>
+                            .delete-btn {
+                                background-color: #ff4b4b !important;
+                                color: white !important;
+                            }
+                            </style>
+                            """,
+                            unsafe_allow_html=True
+                        )
     else:
         st.warning("Файл пуст или не загружен.")
+        
+        # Кнопка сохранения пустого файла
+        if file_path:
+            filename = os.path.basename(file_path)
+            download_data(df, f"updated_{filename}")
 else:
     st.title("📦 Управление товарами")
     st.warning("Выберите файл для начала работы.")
