@@ -63,13 +63,13 @@ img {
 }
 .fixed-delete-bar {
     position: fixed;
-    bottom: 0;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
     background-color: rgba(32, 33, 36, 0.98);
     padding: 8px 16px;
-    border-radius: 8px 8px 0 0;
-    border-top: 1px solid #444;
+    border-radius: 999px;
+    border: 1px solid #444;
     z-index: 9999;
 }
 .fixed-delete-bar-inner {
@@ -77,27 +77,40 @@ img {
     align-items: center;
     gap: 12px;
 }
-.fixed-delete-bar button[kind="secondary"] {
-    background-color: #ff4b4b !important;
-    color: white !important;
-}
-.page-link {
-    display: inline-block;
-    padding: 4px 8px;
-    margin: 0 2px;
-    border-radius: 4px;
+.fixed-delete-button {
+    background-color: #ff4b4b;
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 999px;
     cursor: pointer;
-    background-color: #262730;
-    color: #eee;
     font-size: 0.9rem;
 }
-.page-link-active {
+.fixed-delete-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+.page-pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background-color: #262730;
+    color: #eee;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.page-pill-active {
     background-color: #ff4b4b;
     color: #fff;
 }
-.page-link-disabled {
-    cursor: default;
+.page-pill-disabled {
     opacity: 0.5;
+    cursor: default;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -178,17 +191,20 @@ def get_page_numbers(current, total, delta=1, ends=1):
 
 def render_pagination(current_page, total_pages, key_prefix):
     pages = get_page_numbers(current_page, total_pages)
-    cols = st.columns(len(pages))
-    new_page = current_page
-    for i, p in enumerate(pages):
-        with cols[i]:
-            if p == -1:
-                st.markdown('<span class="page-link page-link-disabled">...</span>', unsafe_allow_html=True)
-            else:
-                cls = "page-link page-link-active" if p == current_page else "page-link"
-                if st.button(f"{p}", key=f"{key_prefix}_page_{p}"):
-                    new_page = p
-    return new_page
+    html = '<div class="pagination">'
+    for p in pages:
+        if p == -1:
+            html += '<span class="page-pill page-pill-disabled">...</span>'
+        else:
+            cls = "page-pill page-pill-active" if p == current_page else "page-pill"
+            # используем формочку, чтобы ловить клик
+            html += f"""
+            <form action="" method="post" style="display:inline;">
+              <button name="{key_prefix}_page" value="{p}" class="{cls}" type="submit">{p}</button>
+            </form>
+            """
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 # ---------- Основная логика ----------
 file_path = get_file_path()
@@ -231,11 +247,17 @@ if file_path:
         current_page = max(1, min(current_page, total_pages))
 
         st.markdown("### Страницы")
-        new_page = render_pagination(current_page, total_pages, key_prefix="top")
-        if new_page != current_page:
-            st.session_state['page'] = new_page
-            st.rerun()
-        current_page = st.session_state['page']
+        render_pagination(current_page, total_pages, key_prefix="top")
+
+        # обработка клика по страницам
+        page_param = st.experimental_get_query_params().get("top_page", None)
+
+        # fallback: читаем из формы через session_state
+        for k, v in st.session_state.items():
+            if k.endswith("_page") and isinstance(v, str) and v.isdigit():
+                if k.startswith("top"):
+                    current_page = int(v)
+                    st.session_state['page'] = current_page
 
         start_idx = (current_page - 1) * PAGE_SIZE
         end_idx = min(start_idx + PAGE_SIZE, len(df_filtered))
@@ -271,7 +293,6 @@ if file_path:
                     price = row.get('price', '')
                     st.write(f"**{price}**")
 
-                    # чекбокс выбора
                     new_checked = st.checkbox(
                         "Выбрать",
                         key=f"select_{real_idx}",
@@ -285,30 +306,30 @@ if file_path:
                     st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("### Страницы")
-        new_page_bottom = render_pagination(current_page, total_pages, key_prefix="bottom")
-        if new_page_bottom != current_page:
-            st.session_state['page'] = new_page_bottom
-            st.rerun()
+        render_pagination(current_page, total_pages, key_prefix="bottom")
 
         selected_count = len(st.session_state['selected_rows'])
 
+        # нижняя панель с кнопкой удаления
         st.markdown(
-            """
+            f"""
 <div class="fixed-delete-bar">
   <div class="fixed-delete-bar-inner">
-    <div><strong>Выбрано:</strong> <span id="selected-count"></span></div>
+    <span>Выбрано: {selected_count}</span>
+    <form action="" method="post" style="display:inline;">
+      <button class="fixed-delete-button" name="delete_selected" value="1" {'disabled' if selected_count == 0 else ''}>
+        🗑️ Удалить выбранные
+      </button>
+    </form>
   </div>
 </div>
 """,
             unsafe_allow_html=True,
         )
-        st.markdown(
-            f"<script>document.getElementById('selected-count').innerText = '{selected_count}';</script>",
-            unsafe_allow_html=True,
-        )
 
-        if selected_count > 0:
-            if st.button("🗑️ Удалить выбранные", key="fixed_delete_button"):
+        # обработка удаления
+        if st.session_state.get("delete_selected") == "1" or st.session_state.get("delete_selected") == 1:
+            if selected_count > 0:
                 for real_idx in list(st.session_state['selected_rows']):
                     if real_idx in df.index:
                         df.loc[real_idx, 'is_deleted'] = True
