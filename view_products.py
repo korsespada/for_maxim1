@@ -37,7 +37,7 @@ def get_first_image(photos_str):
 st.markdown("""
 <style>
 div[data-testid="column"] {
-    background-color: #f0f2f6;
+    background-color: #1e1f23;
     padding: 10px;
     border-radius: 5px;
     margin-bottom: 10px;
@@ -59,24 +59,23 @@ img {
 }
 .card-selected {
     border: 2px solid #ff4b4b;
-    box-shadow: 0 0 10px rgba(255, 75, 75, 0.6);
+    box-shadow: 0 0 6px rgba(255, 75, 75, 0.6);
 }
 .fixed-delete-bar {
     position: fixed;
     bottom: 0;
-    left: 0;
-    width: 100%;
-    background-color: rgba(32, 33, 36, 0.95);
-    padding: 10px 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(32, 33, 36, 0.98);
+    padding: 8px 16px;
+    border-radius: 8px 8px 0 0;
     border-top: 1px solid #444;
     z-index: 9999;
 }
 .fixed-delete-bar-inner {
-    max-width: 1200px;
-    margin: 0 auto;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 12px;
 }
 .fixed-delete-bar button[kind="secondary"] {
     background-color: #ff4b4b !important;
@@ -138,7 +137,8 @@ def load_data(file_path):
 
     df['thumb_url'] = df['photos'].apply(get_first_image).apply(to_thumb)
     df['display_desc'] = df['description'].fillna('Без описания').astype(str).str.strip()
-    df.loc[df['display_desc'].str.lower().isin(['nan', 'nan.']), 'display_desc'] = 'Без описания'
+    mask_nan = df['display_desc'].str.lower().isin(['nan', 'nan.', 'none', ''])
+    df.loc[mask_nan, 'display_desc'] = 'Без описания'
     if 'is_deleted' not in df.columns:
         df['is_deleted'] = False
     return df
@@ -186,7 +186,7 @@ def render_pagination(current_page, total_pages, key_prefix):
                 st.markdown('<span class="page-link page-link-disabled">...</span>', unsafe_allow_html=True)
             else:
                 cls = "page-link page-link-active" if p == current_page else "page-link"
-                if st.button(str(p), key=f"{key_prefix}_page_{p}"):
+                if st.button(f"{p}", key=f"{key_prefix}_page_{p}"):
                     new_page = p
     return new_page
 
@@ -257,21 +257,10 @@ if file_path:
                     card_class = "card-selected" if selected else ""
                     st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
 
-                    img_clicked = st.button(
-                        " ",
-                        key=f"imgbtn_{real_idx}",
-                    )
                     if row.get('thumb_url'):
                         st.image(row['thumb_url'], use_container_width=True)
                     else:
                         st.text("Нет фото")
-
-                    if img_clicked:
-                        if selected:
-                            st.session_state['selected_rows'].discard(real_idx)
-                        else:
-                            st.session_state['selected_rows'].add(real_idx)
-                        st.rerun()
 
                     desc = row.get('display_desc', 'Без описания')
                     st.markdown(
@@ -282,6 +271,17 @@ if file_path:
                     price = row.get('price', '')
                     st.write(f"**{price}**")
 
+                    # чекбокс выбора
+                    new_checked = st.checkbox(
+                        "Выбрать",
+                        key=f"select_{real_idx}",
+                        value=selected
+                    )
+                    if new_checked and not selected:
+                        st.session_state['selected_rows'].add(real_idx)
+                    if not new_checked and selected:
+                        st.session_state['selected_rows'].discard(real_idx)
+
                     st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("### Страницы")
@@ -290,26 +290,23 @@ if file_path:
             st.session_state['page'] = new_page_bottom
             st.rerun()
 
+        selected_count = len(st.session_state['selected_rows'])
+
         st.markdown(
             """
 <div class="fixed-delete-bar">
   <div class="fixed-delete-bar-inner">
-    <div>
-      <strong>Выбрано товаров:</strong> <span id="selected-count"></span>
-    </div>
-    <div id="delete-button-container"></div>
+    <div><strong>Выбрано:</strong> <span id="selected-count"></span></div>
   </div>
 </div>
-<script>
-</script>
 """,
             unsafe_allow_html=True,
         )
-        selected_count = len(st.session_state['selected_rows'])
         st.markdown(
             f"<script>document.getElementById('selected-count').innerText = '{selected_count}';</script>",
             unsafe_allow_html=True,
         )
+
         if selected_count > 0:
             if st.button("🗑️ Удалить выбранные", key="fixed_delete_button"):
                 for real_idx in list(st.session_state['selected_rows']):
